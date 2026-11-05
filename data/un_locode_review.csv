@@ -1,0 +1,60 @@
+source_id,name,action,lon_new,lat_new,reason
+GBUGH,Billingborough,drop,,,Inland village in Lincolnshire; not a port; longitude garbled into the Atlantic
+ESELV,Elvillar,drop,,,Inland village in Álava; not a port; longitude garbled into the Atlantic
+GBBHJ,Bramshall,drop,,,Inland village in Staffordshire; not a port; longitude garbled into the Atlantic
+DEGYM,Mainzlar,drop,,,Inland village in Hesse; not a port; longitude sign flipped
+DEWNT,Wedlenstedt,drop,,,Inland village in Lower Saxony; not a port; longitude sign flipped onto land in Kerry so not flagged by the checks
+GBGYL,Argyll,drop,,,North Sea oil field; offshore installation
+GBUCN,Buchan,drop,,,North Sea oil field; offshore installation
+GBCUR,Curlew,drop,,,North Sea oil field; offshore installation
+BETOB,Thorntonbank,drop,,,Offshore wind farm
+GBLIB,Liverpool Bay Terminal,drop,,,Offshore oil terminal
+GBRLG,Bar Light,drop,,,Pilot station / light position at sea; not a port
+GBCGT,Covent Garden,drop,,,Position is off Cork; not a usable port location
+GBCUN,Cullen,fix,-2.8166667,57.6833305,Longitude sign flipped
+GBCLJ,Claonaig,fix,-5.3833333,55.7499971,Longitude sign flipped
+ISGRB,Gardabaer,fix,-21.9333333,64.0833308,Longitude digits transposed (-12.93 for -21.93)
+ISLAN,Landeyjahöfn,fix,-20.1166667,63.5166640,Latitude digit wrong (61.52 for 63.52)
+NLNTJ,Neeltje Jans,fix,3.7000000,51.6333303,Latitude digit wrong (53.63 for 51.63)
+GBCCE,Catterline,fix,-2.2000000,56.8999971,Longitude digit wrong (-1.20 for -2.20)
+GBWEX,Withernsea,fix,0.0333333,53.7333303,Longitude digit wrong (0.333 for 0.033)
+NORET,Røst,keep,,,Small island; missing from Natural Earth 10m land
+NOHEV,Helligvær,keep,,,Small island; missing from Natural Earth 10m land
+RUSLK,Solovki,keep,,,Island; position may be ~0.4° too far north; resolve in step 4
+DENNH,Neuendorf-Hiddensee,keep,,,Island port; UN position rough; resolve in step 4
+EEMAH,Mahu Sadam,keep,,,Coastal port; UN position rough; resolve in step 4
+GBMSD,Maitresse Island,keep,,,Les Minquiers reef island; missing from Natural Earth 10m land
+NOLOV,Lovund,keep,,,Small island; missing from Natural Earth 10m land
+ISFEY,Flatey,keep,,,Small island; missing from Natural Earth 10m land
+DKCSO,Christiansø Havn,keep,,,Small island; missing from Natural Earth 10m land
+GBEKN,Eisken,keep,,,Coastal port; UN position rough; looks like a duplicate of GBESK (Eishken)
+FIJUS,Jussaro,keep,,,Small island; missing from Natural Earth 10m land
+GBSCH,Stockinish,keep,,,Coastal port; UN position rough; resolve in step 4
+ESGTX,Getxo,keep,,,Coastal port; latitude ~0.2° too far north; resolve in step 4
+GBESK,Eishken,keep,,,Coastal port; UN position rough; looks like a duplicate of GBEKN (Eisken)
+NOSTH,Steinshamn,keep,,,Island port; missing from Natural Earth 10m land
+FIHAR,Harvaluoto,keep,,,Island port; missing from Natural Earth 10m land
+NOGRP,Grip,keep,,,Small island; missing from Natural Earth 10m land
+EEPRL,Prangli Lõunasadam,keep,,,Small island; missing from Natural Earth 10m land
+GBBRU,"Bruray, Out Skerries",keep,,,Small island; missing from Natural Earth 10m land
+NOFLM,Flem,keep,,,Coastal port; UN position rough
+GBLCD,Loch Torridon,keep,,,Sea loch; UN position rough; resolve in step 4
+GBEME,East Mersea,keep,,,Island port; UN position rough; resolve in step 4
+NOKSY,Kvitsøy,keep,,,Small island; missing from Natural Earth 10m land
+NOSRO,Skrova,keep,,,Small island; missing from Natural Earth 10m land
+EEABR,Abruka,keep,,,Small island; missing from Natural Earth 10m land
+GBORK,Orkney,keep,,,Generic code for Orkney rather than a single harbour; check in step 4
+NOISY,Ingøy,keep,,,Small island; missing from Natural Earth 10m land
+NOTJL,Tjøtta,keep,,,Coastal port; UN position rough
+GBCNX,Cawsand,keep,,,Coastal port; UN position rough; resolve in step 4
+FIKSN,Kasnäs,keep,,,Island port; missing from Natural Earth 10m land
+NOMGR,Manger,keep,,,Coastal port; UN position rough
+NOGHV,Gunhildvågen,keep,,,Coastal port; UN position rough
+IECLD,Clare Island,keep,,,Island port; missing from Natural Earth 10m land
+DELNU,Lauenburg/Elbe,keep,,,River port (Elbe)
+NLHGS,Hardinxveld,keep,,,River port (Merwede)
+NLMDG,Muiderberg,keep,,,Lake port (Markermeer)
+NLMKN,Marken,keep,,,Lake port (Markermeer)
+DEHPE,Hoopte,keep,,,River port (Elbe)
+DEOTK,Oortkaten,keep,,,River port (Elbe)
+BEBOM,Boom,keep,,,River port (Rupel)

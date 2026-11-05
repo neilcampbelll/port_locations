@@ -48,3 +48,6 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# natural earth data
+data/natural_earth/
