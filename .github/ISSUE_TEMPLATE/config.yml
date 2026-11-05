@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Methods paper
+    url: https://neilcampbelll.github.io/port_locations/
+    about: How the port footprints were built, and what each column means.

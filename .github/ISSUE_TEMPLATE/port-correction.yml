@@ -1,0 +1,91 @@
+name: Port correction
+description: Report a port footprint that is missing, misplaced, not a port, or the wrong size
+title: "[Port] "
+labels: ["port-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for checking the port layer. Please use one issue per port.
+
+        - Find the port's `source_id` in `ports_final.csv` (attached to the [latest release](https://github.com/neilcampbelll/port_locations/releases/latest)) or in the shapefile's attribute table.
+        - **drop**: the footprint is not a port, or is a duplicate. Give the `source_id`.
+        - **move**: the port is in the wrong place. Give the `source_id` and the corrected position. A moved port becomes a circle at the new position.
+        - **add**: a port is missing. Leave `source_id` blank and give the name and position.
+        - **resize**: the footprint is too large or too small. Give the `source_id` and a new radius (circles) or margin (GFW cell footprints).
+
+        Positions are decimal degrees in WGS 84, e.g. longitude `-1.1452`, latitude `60.1531`.
+
+  - type: dropdown
+    id: action
+    attributes:
+      label: Action
+      options:
+        - drop
+        - move
+        - add
+        - resize
+    validations:
+      required: true
+
+  - type: input
+    id: country
+    attributes:
+      label: Country (ISO 2-letter code)
+      placeholder: GB
+    validations:
+      required: true
+
+  - type: input
+    id: source_id
+    attributes:
+      label: source_id
+      description: Leave blank when adding a new port.
+      placeholder: GB_LERWICK_1
+
+  - type: input
+    id: name
+    attributes:
+      label: Port name
+      placeholder: Lerwick
+
+  - type: input
+    id: lon
+    attributes:
+      label: Longitude (decimal degrees)
+      description: For move and add only.
+      placeholder: "-1.1452"
+
+  - type: input
+    id: lat
+    attributes:
+      label: Latitude (decimal degrees)
+      description: For move and add only.
+      placeholder: "60.1531"
+
+  - type: input
+    id: radius_km
+    attributes:
+      label: Circle radius (km)
+      description: For add, or resize of a circle footprint. Leave blank to use the default of 1 km.
+
+  - type: input
+    id: margin_m
+    attributes:
+      label: GFW footprint margin (m)
+      description: For resize of a GFW cell footprint only. Leave blank to use the default of 250 m.
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason and evidence
+      description: What is wrong and how you know, e.g. from your VMS data or local knowledge. You can drag a screenshot or map into this box.
+    validations:
+      required: true
+
+  - type: input
+    id: reviewer
+    attributes:
+      label: Your name and institute
+    validations:
+      required: true
