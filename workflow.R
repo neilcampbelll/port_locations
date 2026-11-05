@@ -396,6 +396,67 @@ ports_final <- ports_cmp %>%
   select(source, source_id, country, name, lon, lat, footprint,
          un_name, un_dist_km, vms_name, vms_dist_km, gfw_name, gfw_dist_km)
 
+## Apply reviewers' corrections (data/port_review.csv)
+
+review_ports <- read_csv(
+  "data/port_review.csv",
+  col_types = cols(
+    source_id = col_character(), action = col_character(), country = col_character(),
+    name = col_character(), lon = col_double(), lat = col_double(),
+    radius_km = col_double(), margin_m = col_double(), reason = col_character(),
+    reviewer = col_character(), date = col_date(), issue = col_character()
+  )
+)
+
+unknown <- review_ports %>%
+  filter(action != "add", !source_id %in% ports_final$source_id)
+
+if (nrow(unknown) > 0) {
+  warning(nrow(unknown), " review row(s) name a source_id not in the port list: ",
+          paste(unknown$source_id, collapse = ", "))
+}
+
+# Where a port has more than one move or resize, the last row wins
+moves <- review_ports %>%
+  filter(action == "move") %>%
+  group_by(source_id) %>%
+  slice_tail(n = 1) %>%
+  ungroup()
+
+resizes <- review_ports %>%
+  filter(action == "resize") %>%
+  group_by(source_id) %>%
+  slice_tail(n = 1) %>%
+  ungroup()
+
+adds <- review_ports %>%
+  filter(action == "add")
+
+ports_final <- ports_final %>%
+  st_drop_geometry() %>%
+  filter(!source_id %in% review_ports$source_id[review_ports$action == "drop"]) %>%
+  mutate(radius_km = NA_real_, margin_m = NA_real_) %>%
+  rows_update(
+    transmute(moves, source_id, lon, lat, footprint = "circle"),  # a moved port becomes a circle
+    by = "source_id", unmatched = "ignore"
+  ) %>%
+  rows_update(
+    select(resizes, source_id, radius_km, margin_m),
+    by = "source_id", unmatched = "ignore"
+  ) %>%
+  bind_rows(
+    transmute(adds,
+              source    = "review",
+              source_id = coalesce(source_id, paste0("REV_", country, "_", name)),
+              country, name, lon, lat,
+              footprint = "circle",
+              radius_km)
+  ) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+
+review_ports %>%
+  count(action)
+
 # Before and after, by source
 full_join(
   ports_cmp   %>% st_drop_geometry() %>% count(source, name = "compared"),
@@ -410,7 +471,7 @@ ports_final %>%
 st_write(ports_final, "output/ports_final.gpkg", delete_dsn = TRUE)
 
 
-src_col <- c(GFW = "steelblue", vmstools = "darkorange", UN_LOCODE = "firebrick")
+src_col <- c(GFW = "steelblue", vmstools = "darkorange", UN_LOCODE = "firebrick", review = "darkgreen")
 bb      <- st_bbox(ports_final)
 
 plot(st_geometry(st_transform(land, 4326)), col = "grey90", border = "grey70",
@@ -425,7 +486,7 @@ legend("topleft", legend = names(src_col), col = src_col, pch = 20, bty = "n")
 cell_margin_m <- 250  # added around each GFW port's cells
 circle_km     <- 1    # radius for ports without GFW cells
 
-gfw_keep <- ports_final$source_id[ports_final$source == "GFW"]
+gfw_keep <- ports_final$source_id[ports_final$footprint == "gfw_cells"]
 
 # The GFW cells' source_id is their S2 cell token
 gfw_cells_keep <- gfw_cells_ices %>%
@@ -441,14 +502,18 @@ gfw_poly <- gfw_cells_keep %>%
   st_transform(3035) %>%
   group_by(port_id) %>%
   summarise(.groups = "drop") %>%   # union of each port's cells
-  st_buffer(cell_margin_m) %>%
   rename(source_id = port_id) %>%
   left_join(st_drop_geometry(ports_final), by = "source_id")
 
+# Default margin unless a reviewer has resized this port
+gfw_poly <- st_buffer(gfw_poly, coalesce(gfw_poly$margin_m, cell_margin_m))
+
 circles <- ports_final %>%
   filter(footprint == "circle") %>%
-  st_transform(3035) %>%
-  st_buffer(circle_km * 1000)
+  st_transform(3035)
+
+# Default radius unless a reviewer has set one
+circles <- st_buffer(circles, coalesce(circles$radius_km, circle_km) * 1000)
 
 footprints <- rbind(gfw_poly[, names(circles)], circles) %>%
   st_transform(4326)
