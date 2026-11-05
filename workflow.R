@@ -4,7 +4,8 @@ library(readr)
 library(dplyr)
 library(sf)
 library(countrycode)
-
+library(vmstools)
+data("ICESareas")
 
 ## Load and process the three files
 # UN LOCODE 
@@ -176,4 +177,204 @@ un_clean %>%
   count(action)
 
 st_write(un_clean, "output/un_locode_clean.gpkg", delete_dsn = TRUE)
+
+
+
+## collapse GFW anchorage cells to ports and keep those in the ICES area
+
+max_ices_km <- 20  
+cluster_km  <- 5   
+
+ices <- ICESareas %>%
+  st_transform(3035) %>%
+  st_make_valid()
+
+# cut global file down
+ices_bb <- st_bbox(st_transform(ICESareas, 4326))
+
+gfw_cells <- st_read("output/ports_all.gpkg", quiet = TRUE) %>%
+  filter(
+    source == "GFW",
+    between(lon, ices_bb["xmin"] - 2, ices_bb["xmax"] + 2),
+    between(lat, ices_bb["ymin"] - 2, ices_bb["ymax"] + 2)
+  ) %>%
+  st_transform(3035)
+
+xy <- st_coordinates(gfw_cells)
+
+# within each name and country, link cells within cluster_km of each other
+gfw_cells <- gfw_cells %>%
+  st_drop_geometry() %>%
+  mutate(x = xy[, "X"], y = xy[, "Y"]) %>%
+  group_by(country, name) %>%
+  mutate(
+    cluster = if (n() == 1) 1L else
+      cutree(hclust(dist(cbind(x, y)), method = "single"), h = cluster_km * 1000)
+  ) %>%
+  ungroup()
+
+gfw_ports <- gfw_cells %>%
+  group_by(country, name, cluster) %>%
+  summarise(
+    n_cells   = n(),
+    n_at_dock = sum(at_dock, na.rm = TRUE),
+    x         = mean(x),
+    y         = mean(y),
+    .groups   = "drop"
+  ) %>%
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+
+gfw_ports <- gfw_ports %>%
+  mutate(
+    dist_ices_km = as.numeric(
+      st_distance(., ices[st_nearest_feature(., ices), ], by_element = TRUE)
+    ) / 1000
+  ) %>%
+  st_transform(4326) %>%
+  mutate(
+    source    = "GFW",
+    source_id = paste(country, name, cluster, sep = "_"),
+    lon       = st_coordinates(.)[, "X"],
+    lat       = st_coordinates(.)[, "Y"]
+  ) %>%
+  select(source, source_id, country, name, lon, lat, n_cells, n_at_dock, dist_ices_km)
+
+gfw_ports %>%
+  st_drop_geometry() %>%
+  filter(dist_ices_km > max_ices_km, dist_ices_km <= 100) %>%
+  arrange(dist_ices_km) %>%
+  write.csv("output/gfw_near_edge.csv", row.names = FALSE)
+
+gfw_ices <- gfw_ports %>%
+  filter(dist_ices_km <= max_ices_km)
+
+gfw_ices %>%
+  st_drop_geometry() %>%
+  count(country, sort = TRUE)
+
+st_write(gfw_ices, "output/gfw_ports_ices.gpkg", delete_dsn = TRUE)
+
+
+## Compare sources: nearest port in each other source
+
+match_km <- 3  # ports in different sources within this distance are treated as the same port
+
+dist_to_ices_km <- function(x) {
+  x_3035 <- st_transform(x, 3035)
+  as.numeric(
+    st_distance(x_3035, ices[st_nearest_feature(x_3035, ices), ], by_element = TRUE)
+  ) / 1000
+}
+
+# Apply the same ICES-area cut-off to vmstools and UN LOCODE as to GFW
+vms_ices <- st_read("output/ports_all.gpkg", quiet = TRUE) %>%
+  filter(source == "vmstools") %>%
+  mutate(dist_ices_km = dist_to_ices_km(.)) %>%
+  filter(dist_ices_km <= max_ices_km)
+
+un_ices <- un_clean %>%
+  mutate(dist_ices_km = dist_to_ices_km(.)) %>%
+  filter(dist_ices_km <= max_ices_km)
+
+# Common columns, rebuilt from lon/lat (the geometry column names differ between objects)
+ports_cmp <- bind_rows(
+  st_drop_geometry(un_ices),
+  st_drop_geometry(vms_ices),
+  st_drop_geometry(gfw_ices)
+) %>%
+  select(source, source_id, country, name, lon, lat) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326, remove = FALSE) %>%
+  st_transform(3035)
+
+ports_cmp %>%
+  st_drop_geometry() %>%
+  count(source)
+
+# GFW cells belonging to the ports kept in the ICES area
+gfw_cells_ices <- gfw_cells %>%
+  semi_join(st_drop_geometry(gfw_ices), by = c("country", "name", "cluster")) %>%
+  mutate(source_id = paste(country, name, cluster, sep = "_")) %>%
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+
+nearest <- function(x, y) {
+  i <- st_nearest_feature(x, y)
+  list(
+    name    = y$name[i],
+    dist_km = as.numeric(st_distance(x, y[i, ], by_element = TRUE)) / 1000
+  )
+}
+
+for (col in c("un_name", "vms_name", "gfw_name"))          ports_cmp[[col]] <- NA_character_
+for (col in c("un_dist_km", "vms_dist_km", "gfw_dist_km")) ports_cmp[[col]] <- NA_real_
+
+is_un  <- ports_cmp$source == "UN_LOCODE"
+is_vms <- ports_cmp$source == "vmstools"
+is_gfw <- ports_cmp$source == "GFW"
+
+# UN LOCODE <-> vmstools: point to point
+nn <- nearest(ports_cmp[is_un, ], ports_cmp[is_vms, ])
+ports_cmp$vms_name[is_un]    <- nn$name
+ports_cmp$vms_dist_km[is_un] <- nn$dist_km
+
+nn <- nearest(ports_cmp[is_vms, ], ports_cmp[is_un, ])
+ports_cmp$un_name[is_vms]    <- nn$name
+ports_cmp$un_dist_km[is_vms] <- nn$dist_km
+
+# UN LOCODE and vmstools -> GFW: nearest GFW cell
+nn <- nearest(ports_cmp[!is_gfw, ], gfw_cells_ices)
+ports_cmp$gfw_name[!is_gfw]    <- nn$name
+ports_cmp$gfw_dist_km[!is_gfw] <- nn$dist_km
+
+# GFW -> UN LOCODE and vmstools: the closest any of the port's cells comes
+for (s in c("un", "vms")) {
+  target <- if (s == "un") is_un else is_vms
+  nn     <- nearest(gfw_cells_ices, ports_cmp[target, ])
+  
+  best <- gfw_cells_ices %>%
+    st_drop_geometry() %>%
+    mutate(nn_name = nn$name, nn_dist_km = nn$dist_km) %>%
+    group_by(source_id) %>%
+    slice_min(nn_dist_km, n = 1, with_ties = FALSE) %>%
+    ungroup()
+  
+  m <- match(ports_cmp$source_id[is_gfw], best$source_id)
+  ports_cmp[[paste0(s, "_name")]][is_gfw]    <- best$nn_name[m]
+  ports_cmp[[paste0(s, "_dist_km")]][is_gfw] <- best$nn_dist_km[m]
+}
+
+ports_cmp <- ports_cmp %>%
+  mutate(
+    n_matches = (coalesce(un_dist_km,  Inf) <= match_km) +
+      (coalesce(vms_dist_km, Inf) <= match_km) +
+      (coalesce(gfw_dist_km, Inf) <= match_km)
+  ) %>%
+  st_transform(4326)
+
+# How many ports in each source are confirmed by 0, 1 or 2 other sources
+ports_cmp %>%
+  st_drop_geometry() %>%
+  count(source, n_matches)
+
+# By country, where unmatched ports are (vmstools has no country, so it's left out)
+ports_cmp %>%
+  st_drop_geometry() %>%
+  filter(source != "vmstools") %>%
+  group_by(country) %>%
+  summarise(
+    un            = sum(source == "UN_LOCODE"),
+    un_unmatched  = sum(source == "UN_LOCODE" & n_matches == 0),
+    gfw           = sum(source == "GFW"),
+    gfw_unmatched = sum(source == "GFW" & n_matches == 0)
+  ) %>%
+  arrange(desc(gfw_unmatched))
+
+# Output
+ports_cmp %>%
+  st_drop_geometry() %>%
+  filter(n_matches == 0) %>%
+  arrange(source, country, name) %>%
+  write.csv("output/ports_unmatched.csv", row.names = FALSE)
+
+st_write(ports_cmp, "output/ports_compared.gpkg", delete_dsn = TRUE)
+
 
