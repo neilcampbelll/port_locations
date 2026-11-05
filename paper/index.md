@@ -182,6 +182,12 @@ The final product is `output/port_footprints_ices.shp`, published as [port_footp
 | `output/ports_all.gpkg` | 1 | All three sources harmonised (171,102 points) |
 | `data/un_locode_review.csv` | 2 | Manual decisions: keep, drop or fix, with reasons (input, under version control) |
 
+### Example: Shetland
+
+![Port footprints around the Shetland Islands](shetland.png)
+
+*Port footprints in `port_footprints_ices.shp` around the Shetland Islands.*
+
 ## Limitations and further work
 
 - **AIS coverage of small boats.** GFW cells come from AIS, which many smaller vessels do not carry, and a cell needs at least 20 stationary vessels to count as an anchorage. Small harbours can therefore have a tiny GFW footprint or none. Those ports rely on the 1 km fallback circle.
