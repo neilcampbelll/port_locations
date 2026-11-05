@@ -218,6 +218,8 @@ gfw_ports <- gfw_cells %>%
   summarise(
     n_cells   = n(),
     n_at_dock = sum(at_dock, na.rm = TRUE),
+    min_shore_km = if (all(is.na(distance_from_shore_m))) NA_real_ else
+      min(distance_from_shore_m, na.rm = TRUE) / 1000,
     x         = mean(x),
     y         = mean(y),
     .groups   = "drop"
@@ -237,7 +239,7 @@ gfw_ports <- gfw_ports %>%
     lon       = st_coordinates(.)[, "X"],
     lat       = st_coordinates(.)[, "Y"]
   ) %>%
-  select(source, source_id, country, name, lon, lat, n_cells, n_at_dock, dist_ices_km)
+  select(source, source_id, country, name, lon, lat, n_cells, n_at_dock, dist_ices_km, min_shore_km)
 
 gfw_ports %>%
   st_drop_geometry() %>%
@@ -282,7 +284,7 @@ ports_cmp <- bind_rows(
   st_drop_geometry(vms_ices),
   st_drop_geometry(gfw_ices)
 ) %>%
-  select(source, source_id, country, name, lon, lat) %>%
+  select(source, source_id, country, name, lon, lat, min_shore_km) %>%
   st_as_sf(coords = c("lon", "lat"), crs = 4326, remove = FALSE) %>%
   st_transform(3035)
 
@@ -290,10 +292,11 @@ ports_cmp %>%
   st_drop_geometry() %>%
   count(source)
 
+
 # GFW cells belonging to the ports kept in the ICES area
 gfw_cells_ices <- gfw_cells %>%
-  semi_join(st_drop_geometry(gfw_ices), by = c("country", "name", "cluster")) %>%
-  mutate(source_id = paste(country, name, cluster, sep = "_")) %>%
+  mutate(port_id = paste(country, name, cluster, sep = "_")) %>%
+  filter(port_id %in% gfw_ices$source_id) %>%
   st_as_sf(coords = c("x", "y"), crs = 3035)
 
 nearest <- function(x, y) {
@@ -333,11 +336,11 @@ for (s in c("un", "vms")) {
   best <- gfw_cells_ices %>%
     st_drop_geometry() %>%
     mutate(nn_name = nn$name, nn_dist_km = nn$dist_km) %>%
-    group_by(source_id) %>%
+    group_by(port_id) %>%
     slice_min(nn_dist_km, n = 1, with_ties = FALSE) %>%
     ungroup()
   
-  m <- match(ports_cmp$source_id[is_gfw], best$source_id)
+  m <- match(ports_cmp$source_id[is_gfw], best$port_id)
   ports_cmp[[paste0(s, "_name")]][is_gfw]    <- best$nn_name[m]
   ports_cmp[[paste0(s, "_dist_km")]][is_gfw] <- best$nn_dist_km[m]
 }
@@ -377,4 +380,108 @@ ports_cmp %>%
 
 st_write(ports_cmp, "output/ports_compared.gpkg", delete_dsn = TRUE)
 
+## Definitive port list
 
+gfw_cover_km <- 1  # vmstools / UN points this close to a GFW cell are covered by the GFW footprint
+dup_km       <- 3  # UN points this close to a vmstools point are treated as duplicates
+max_offshore_km <- 5  # GFW ports whose nearest cell is further than this from shore are dropped
+
+ports_final <- ports_cmp %>%
+  filter(
+    (source == "GFW" & (is.na(min_shore_km) | min_shore_km <= max_offshore_km)) |
+      (source == "vmstools"  & gfw_dist_km > gfw_cover_km) |
+      (source == "UN_LOCODE" & gfw_dist_km > gfw_cover_km & vms_dist_km > dup_km)
+  ) %>%
+  mutate(footprint = if_else(source == "GFW", "gfw_cells", "circle")) %>%
+  select(source, source_id, country, name, lon, lat, footprint,
+         un_name, un_dist_km, vms_name, vms_dist_km, gfw_name, gfw_dist_km)
+
+# Before and after, by source
+full_join(
+  ports_cmp   %>% st_drop_geometry() %>% count(source, name = "compared"),
+  ports_final %>% st_drop_geometry() %>% count(source, name = "final"),
+  by = "source"
+)
+
+ports_final %>%
+  st_drop_geometry() %>%
+  write.csv("output/ports_final.csv", row.names = FALSE)
+
+st_write(ports_final, "output/ports_final.gpkg", delete_dsn = TRUE)
+
+
+src_col <- c(GFW = "steelblue", vmstools = "darkorange", UN_LOCODE = "firebrick")
+bb      <- st_bbox(ports_final)
+
+plot(st_geometry(st_transform(land, 4326)), col = "grey90", border = "grey70",
+     xlim = bb[c("xmin", "xmax")], ylim = bb[c("ymin", "ymax")])
+plot(st_geometry(ports_final), pch = 20, cex = 0.3,
+     col = src_col[ports_final$source], add = TRUE)
+legend("topleft", legend = names(src_col), col = src_col, pch = 20, bty = "n")
+
+
+## Port footprints: GFW cell polygons plus a margin, circles elsewhere
+
+cell_margin_m <- 250  # added around each GFW port's cells
+circle_km     <- 1    # radius for ports without GFW cells
+
+gfw_keep <- ports_final$source_id[ports_final$source == "GFW"]
+
+# The GFW cells' source_id is their S2 cell token
+gfw_cells_keep <- gfw_cells_ices %>%
+  st_drop_geometry() %>%
+  filter(port_id %in% gfw_keep)
+
+cells <- s2::as_s2_cell(gfw_cells_keep$source_id)
+stopifnot(all(s2::s2_cell_level(cells) == 14))  # check the tokens parsed as level-14 cells
+
+gfw_poly <- gfw_cells_keep %>%
+  mutate(geometry = st_as_sfc(s2::s2_cell_polygon(cells))) %>%
+  st_as_sf() %>%
+  st_transform(3035) %>%
+  group_by(port_id) %>%
+  summarise(.groups = "drop") %>%   # union of each port's cells
+  st_buffer(cell_margin_m) %>%
+  rename(source_id = port_id) %>%
+  left_join(st_drop_geometry(ports_final), by = "source_id")
+
+circles <- ports_final %>%
+  filter(footprint == "circle") %>%
+  st_transform(3035) %>%
+  st_buffer(circle_km * 1000)
+
+footprints <- rbind(gfw_poly[, names(circles)], circles) %>%
+  st_transform(4326)
+
+footprints %>%
+  st_drop_geometry() %>%
+  count(footprint)
+
+st_write(footprints, "output/port_footprints.gpkg", delete_dsn = TRUE)
+
+## Clip footprints to the ICES areas and export as a shapefile
+
+ices_union <- st_union(ices)
+
+footprints_ices <- footprints %>%
+  st_transform(3035) %>%
+  st_intersection(ices_union) %>%
+  st_collection_extract("POLYGON", warn = FALSE) %>%
+  group_by(source, source_id) %>%
+  summarise(across(c(country, name, lon, lat, footprint), first), .groups = "drop") %>%
+  st_cast("MULTIPOLYGON") %>%
+  st_transform(4326)
+
+# Ports lost by the clip (entirely on land or outside the ICES areas)
+full_join(
+  footprints      %>% st_drop_geometry() %>% count(source, name = "before"),
+  footprints_ices %>% st_drop_geometry() %>% count(source, name = "after"),
+  by = "source"
+)
+
+footprints_ices %>%
+  st_drop_geometry() %>%
+  count(country, sort = TRUE)
+
+st_write(footprints_ices, "output/port_footprints_ices.shp",
+         layer_options = "ENCODING=UTF-8", delete_dsn = TRUE)

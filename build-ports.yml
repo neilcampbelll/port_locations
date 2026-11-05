@@ -1,0 +1,66 @@
+# Rebuilds the port footprints whenever workflow.R or the input data change,
+# and publishes the shapefile as the repository's latest release.
+
+name: Build port footprints
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - workflow.R
+      - data/**
+      - .github/workflows/build-ports.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # vmstools lives in a subfolder of its GitHub repository
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::readr
+            any::dplyr
+            any::sf
+            any::s2
+            any::countrycode
+            github::nielshintzen/vmstools/vmstools
+
+      - name: Run workflow
+        run: Rscript workflow.R
+
+      - name: Zip shapefile
+        run: |
+          cd output
+          zip ../port_footprints_ices.zip port_footprints_ices.*
+
+      # Every run's outputs, kept for 90 days on the run's page
+      - uses: actions/upload-artifact@v4
+        with:
+          name: port-footprints
+          path: |
+            port_footprints_ices.zip
+            output/ports_final.csv
+            output/port_footprints.gpkg
+
+      # Replace the single rolling release, so the download link always gives the latest build
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete footprints-latest --yes --cleanup-tag || true
+          gh release create footprints-latest \
+            port_footprints_ices.zip \
+            output/ports_final.csv \
+            --title "Port footprints (latest build)" \
+            --notes "Built by run ${{ github.run_number }} from commit ${{ github.sha }}. See the methods paper for how the layer is made."
