@@ -205,7 +205,7 @@ The final product is `output/port_footprints_ices.shp`, published as [port_footp
 
 The full workflow is `workflow.R` in the [port_locations repository](https://github.com/neilcampbelll/port_locations). Run from the project root, it rebuilds every output from the files in `data/`. A GitHub Action reruns it whenever `workflow.R` or anything in `data/` changes, and publishes the shapefile as the latest release.
 
-- **R packages:** `readr`, `dplyr` (including its `%>%` pipe), `sf`, `s2` (installed with `sf`), `countrycode` and `vmstools` (for `ICESareas`).
+- **R packages:** `readr`, `dplyr`, `sf`, `s2` (installed with `sf`), `countrycode` and `vmstools` (for `ICESareas`).
 - **Natural Earth:** the 10m land and coastline layers are downloaded on first run to `data/natural_earth/`, which is excluded from the repository by `.gitignore`.
 - **Projection:** distances and buffers are computed in ETRS89-LAEA (EPSG:3035). Outputs are in WGS 84 (EPSG:4326).
 - **Manual decisions:** `data/un_locode_review.csv` is the only hand-edited input. Changing a decision and rerunning the script updates every output.
