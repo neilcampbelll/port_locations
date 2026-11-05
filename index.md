@@ -59,7 +59,7 @@ Each source is cleaned on its own track, then the three are compared and merged 
 The three files are read into one point layer, `ports_all` (171,102 points), with a common set of columns: `source`, `source_id`, `country`, `name`, `lon` and `lat`.
 
 - **UN LOCODE:** `source_id` is the country code plus the location code (for example `GBCUN`).
-- **vmstools:** the file is read as Latin-1, so names like Åbenrå display correctly. The unnamed first column duplicates the harbour name and is dropped. `country` is left empty at this stage.
+- **vmstools:** the file is read as Latin-1, so names like Åbenrå display correctly. The unnamed first column duplicates the harbour name and is dropped. `country` is left empty.
 - **GFW:** `source_id` is the S2 cell token, read as text so tokens made only of digits are not converted to numbers. Three-letter country codes are converted to two-letter codes with the `countrycode` package, to match UN LOCODE. The at-dock flag, distance from shore, drift radius and label source are kept for later steps.
 
 The ICES vocabulary server was considered as an alternative to `countrycode`. Its country code list holds only two-letter codes, with no link to the three-letter codes GFW uses.
@@ -134,7 +134,6 @@ The definitive list keeps a GFW footprint wherever GFW has one, and falls back t
 - **Offshore GFW ports.** A first map of the list showed GFW points scattered across the open North Sea and off Norway. These were oil and gas fields (Tyra, Gorm, Dan, Dumbarton), rigs (Rowan Stavanger) and unnamed offshore anchorages with labels like `GBR-537`, some more than 250 km from shore. None were flagged at dock. GFW's own distance from shore removes them, and unlike Natural Earth it does not miss small islands.
 - **Points already covered by GFW.** A vmstools or UN LOCODE point within 1 km of a GFW cell is left out, because the GFW footprint already covers it.
 - **Duplicate pairs.** Where a vmstools and a UN LOCODE point lie within 3 km of each other, the vmstools position is kept, because UN positions are only to the nearest minute.
-- **Country for vmstools points.** Each takes the country of the nearest UN LOCODE or GFW port.
 
 ## Step 6: Build footprints, clip and export
 
@@ -190,7 +189,7 @@ The final product is `output/port_footprints_ices.shp`, published as [port_footp
 - **Position precision.** UN LOCODE positions are to the nearest minute. Points kept with notes such as "resolve in step 4" (e.g. Getxo, Solovki) have not been corrected individually, and may only be covered by a fallback circle placed some way from the quay.
 - **Manual review from local knowledge.** The drop and fix decisions rest on knowledge of the named places. They are recorded with reasons so they can be challenged.
 - **No country-containment check.** A sign error that moves a point onto land elsewhere, as with Wedlenstedt, passes the coastline checks. Testing that each point lies within its stated country would catch these.
-- **Inferred country for vmstools.** Points near a border may pick up the neighbouring country.
+- **No country for vmstools ports.** vmstools has no country field and none is assigned, so these ports have an empty country in the final layer. A nearest-port or country-polygon lookup could add one.
 - **Inland waterway ports.** GFW includes many Dutch barge towns. They do no harm to VMS filtering but inflate the port count.
 - **Anchorage-only clusters.** GFW ports with no at-dock cells, such as waiting anchorages close to shore, are kept. A rule keeping only ports with at least one at-dock cell could be tested.
 - **GFW drift radius.** Each cell has a drift radius that could size its margin individually. Its units need confirming from GFW's documentation before use.
